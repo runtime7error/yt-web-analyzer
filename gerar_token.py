@@ -53,9 +53,9 @@ def main():
                     secret = line.split("=", 1)[1].strip().strip("'\"")
 
     if not secret:
-        # Gera uma chave mestra aleatória forte se nenhuma foi definida
-        secret = "yt_sec_" + secrets.token_hex(24)
-        print(f"[i] Nenhuma chave encontrada no .env. Gerada nova chave secreta mestra.")
+        # Usa a chave mestre padrão integrada ao ecossistema
+        secret = "crie_uma_chave_secreta_aqui"
+        print(f"[i] Usando chave mestre padrão integrada ao ecossistema: {secret}")
     else:
         print(f"[i] Usando chave secreta encontrada na configuração.")
 
