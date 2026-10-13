@@ -14,6 +14,10 @@ from pathlib import Path
 import secrets
 import sys
 
+# Garante suporte a UTF-8 no terminal Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 def b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
