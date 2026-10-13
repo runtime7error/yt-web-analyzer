@@ -56,30 +56,70 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 bearer_auth = HTTPBearer(auto_error=False)
 
+import base64
+import hashlib
+import hmac
+import json
+import time
+
+def verify_jwt(token: str, secret: str) -> bool:
+    """Verifica assinatura e expiração de tokens JWT no padrão HS256."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return False
+        header_b64, payload_b64, signature_b64 = parts
+        msg = f"{header_b64}.{payload_b64}"
+        expected_sig = base64.urlsafe_b64encode(
+            hmac.new(secret.encode(), msg.encode(), hashlib.sha256).digest()
+        ).decode().rstrip("=")
+        if not secrets.compare_digest(signature_b64, expected_sig):
+            return False
+        pad = len(payload_b64) % 4
+        if pad:
+            payload_b64 += "=" * (4 - pad)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        exp = payload.get("exp")
+        if exp and exp < time.time():
+            return False
+        return True
+    except Exception:
+        return False
+
 def verify_auth(
     header_key: Optional[str] = Security(api_key_header),
     bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_auth),
 ):
     """
     Verifica se a requisição possui a chave/token correto quando API_KEY estiver configurada.
-    Se nenhuma API_KEY for definida no servidor, o acesso opera em modo livre.
+    Aceita:
+    1. Chave mestra estática (permanente / sem expiração)
+    2. Token JWT assinado (com verificação de expiração, ex: válido até 2999)
     """
     if not API_KEY:
         return True
 
-    token = header_key or (bearer.credentials if bearer else None)
-    if not token:
+    raw_token = header_key or (bearer.credentials if bearer else None)
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Autenticação necessária. Forneça o token via cabeçalho 'X-API-Key' ou 'Authorization: Bearer <token>'."
         )
 
-    if not secrets.compare_digest(token.strip(), API_KEY):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chave de autenticação inválida."
-        )
-    return True
+    token = raw_token.strip()
+
+    # 1. Validação direta pela API Key estática
+    if secrets.compare_digest(token, API_KEY):
+        return True
+
+    # 2. Validação por Token JWT assinado
+    if verify_jwt(token, API_KEY):
+        return True
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Chave de autenticação ou token JWT inválido/expirado."
+    )
 
 TEMP_DIR = Path(tempfile.gettempdir()) / "autocutter_downloads"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
