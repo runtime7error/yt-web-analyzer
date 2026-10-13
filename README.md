@@ -59,7 +59,22 @@ No site (`index.html`), clique no botão **⚙️ Configurar API**:
 2. **Chave de Autenticação (API Key):** insira a mesma chave definida na variável `API_KEY`.
 3. Clique em **Salvar Configurações**.
 
-A configuração fica salva no navegador do usuário via `localStorage`.
+A configuração fica salva no navegador do usuário via `safeStorage` (compatível com Google Sites).
+
+---
+
+## 🍪 Como Evitar Bloqueios Anti-Bot do YouTube na Nuvem (Cookies)
+
+Plataformas na nuvem (como Render, AWS, Railway) usam IPs de datacenter que o YouTube frequentemente bloqueia com a mensagem:
+`Sign in to confirm you're not a bot`.
+
+Para permitir o download de **qualquer vídeo restrito ou bloqueado**:
+1. No seu navegador (Chrome, Edge ou Firefox), instale a extensão [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
+2. Acesse o [YouTube](https://www.youtube.com) conectado à sua conta.
+3. Abra a extensão e clique em **Export as TXT** (ou copie o texto gerado).
+4. No painel do seu serviço no **Render / Railway**:
+   - Adicione uma Environment Variable chamada **`YOUTUBE_COOKIES`** e cole todo o conteúdo do arquivo.
+5. Pronto! A API usará automaticamente a sessão para baixar qualquer vídeo sem restrições.
 
 ---
 

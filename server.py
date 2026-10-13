@@ -135,6 +135,50 @@ def verify_auth(
 TEMP_DIR = Path(tempfile.gettempdir()) / "autocutter_downloads"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
+def get_cookiefile_path() -> Optional[str]:
+    """
+    Retorna o caminho de um arquivo de cookies se configurado via:
+    1. Arquivo 'cookies.txt' na raiz do projeto
+    2. Variável de ambiente 'YOUTUBE_COOKIES' ou 'COOKIES'
+    """
+    local_cookie = Path(__file__).parent / "cookies.txt"
+    if local_cookie.exists() and local_cookie.stat().st_size > 0:
+        return str(local_cookie)
+
+    env_cookies = os.getenv("YOUTUBE_COOKIES") or os.getenv("COOKIES")
+    if env_cookies:
+        content = env_cookies.strip()
+        if not ("\n" in content) and len(content) > 100:
+            try:
+                decoded = base64.b64decode(content).decode("utf-8")
+                if "domain" in decoded or "TRUE" in decoded or "# Netscape" in decoded:
+                    content = decoded
+            except Exception:
+                pass
+
+        cookie_path = TEMP_DIR / "yt_cookies.txt"
+        cookie_path.write_text(content, encoding="utf-8")
+        return str(cookie_path)
+
+    return None
+
+def format_ytdl_error(error_msg: str) -> str:
+    msg = str(error_msg)
+    if "Sign in to confirm you’re not a bot" in msg or "Sign in to confirm you're not a bot" in msg:
+        return (
+            "O YouTube bloqueou este vídeo no servidor na nuvem exigindo verificação de login (Anti-bot de datacenter). "
+            "Para resolver: "
+            "1) No Render, crie a variável de ambiente YOUTUBE_COOKIES e cole o conteúdo do seu cookies.txt (extensão 'Get cookies.txt LOCALLY'); "
+            "ou 2) Execute a API localmente pelo arquivo INICIAR.bat no seu PC (usando seu IP residencial que não sofre bloqueio); "
+            "ou 3) Teste vídeos do TikTok, Instagram ou outro vídeo do YouTube sem restrição."
+        )
+    if "Your IP address is blocked" in msg:
+        return (
+            "A plataforma bloqueou temporariamente o IP do servidor na nuvem. "
+            "Execute a API localmente pelo arquivo INICIAR.bat no seu PC para usar seu IP residencial normal."
+        )
+    return f"Não foi possível baixar o vídeo desta URL: {msg}"
+
 
 class DownloadRequest(BaseModel):
     url: str
@@ -173,10 +217,13 @@ def get_video_info(req: DownloadRequest):
         "restrictfilenames": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "android"]
+                "player_client": ["android", "ios", "mweb"]
             }
         },
     }
+    cookie_file = get_cookiefile_path()
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -188,7 +235,7 @@ def get_video_info(req: DownloadRequest):
                 "uploader": info.get("uploader"),
             }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erro ao extrair dados do vídeo: {str(e)}")
+        raise HTTPException(status_code=400, detail=format_ytdl_error(str(e)))
 
 
 @app.post("/api/download", dependencies=[Depends(verify_auth)])
@@ -213,7 +260,7 @@ def download_video(req: DownloadRequest):
         "overwrites": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "android"]
+                "player_client": ["android", "ios", "mweb"]
             }
         },
         "format": "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best",
@@ -232,6 +279,9 @@ def download_video(req: DownloadRequest):
         "nocheckcertificate": True,
         "noplaylist": True,
     }
+    cookie_file = get_cookiefile_path()
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -284,7 +334,7 @@ def download_video(req: DownloadRequest):
             pass
         raise HTTPException(
             status_code=400,
-            detail=f"Não foi possível baixar o vídeo desta URL. Verifique se o link está correto e público: {str(de)}",
+            detail=format_ytdl_error(str(de)),
         )
     except Exception as e:
         try:
